@@ -18,11 +18,11 @@ from __future__ import annotations
 
 import argparse
 import sys
-from typing import Callable, List, Optional
+from typing import Callable, Optional
 
 from . import __version__, build, geodata, geodata_amap, geodata_sim, selftest, static
 
-Subcommand = Callable[[Optional[List[str]]], int]
+Subcommand = Callable[[Optional[list[str]]], int]
 
 SUBCOMMANDS: dict[str, Subcommand] = {
     "urls": build.main,
