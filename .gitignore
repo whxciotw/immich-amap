@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+.venv/
+venv/
+
+# 测试 / 工具缓存
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# 生成物（用 `make urls` / `make static` 重新生成）
+dist/
+
+# 前端 / 本地私有配置
+node_modules/
+.env
+.env.*
+!.env.example
+*.local

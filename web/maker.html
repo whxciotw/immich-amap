@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Immich 高德地图 URL 生成器</title>
+<!--
+  浏览器版生成器（不需要 Python）：填好纠偏服务地址 → 复制 data: URL → 粘进 Immich。
+
+  下面 TILE_CONFIG 必须与 immich_amap/tiles.py 的 tile_config() 保持一致，
+  由 tests/test_web.py 自动校验；改瓦片地址请只改 Python 侧再同步这里。
+
+  注意：data: URL 只有桌面浏览器能用，Immich 移动端会黑屏 —— 手机端请用
+  python3 -m immich_amap static 生成 http 托管版（见 docs/mobile.md）。
+-->
+<style>
+  :root { color-scheme: light dark; }
+  body { font: 14px/1.6 -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif; max-width: 900px; margin: 32px auto; padding: 0 16px; }
+  h1 { font-size: 20px; margin-bottom: 4px; }
+  .sub { opacity: .65; margin-top: 0; }
+  fieldset { border: 1px solid #8884; border-radius: 10px; padding: 12px 16px; margin: 18px 0; }
+  label { display: block; margin: 8px 0; }
+  input[type=text] { width: 100%; box-sizing: border-box; padding: 8px 10px; font: 13px ui-monospace, Consolas, monospace;
+                     border: 1px solid #8886; border-radius: 8px; background: transparent; color: inherit; }
+  .row { display: flex; gap: 8px; align-items: center; }
+  .card { border: 1px solid #8884; border-radius: 10px; padding: 10px 12px; margin: 12px 0; }
+  .card h3 { margin: 0 0 6px; font-size: 14px; }
+  .card .hint { font-size: 12px; opacity: .6; margin: 0 0 6px; }
+  textarea { width: 100%; box-sizing: border-box; height: 72px; font: 11px ui-monospace, Consolas, monospace;
+             word-break: break-all; padding: 8px; border: 1px solid #8886; border-radius: 8px; background: transparent; color: inherit; }
+  button { padding: 6px 12px; border-radius: 8px; border: 1px solid #8886; background: #3b6ef5; color: #fff;
+           cursor: pointer; font-size: 13px; }
+  button.ghost { background: transparent; color: inherit; }
+  .ok { color: #18a058; font-size: 12px; }
+</style>
+</head>
+<body>
+<h1>Immich 高德地图 URL 生成器</h1>
+<p class="sub">纯本地运行（不联网、不存数据）。填好地址 → 复制 → 粘到 Immich「系统设置 → 地图与 GPS 设置 → 地图」。</p>
+
+<fieldset>
+  <legend>1. 填你的纠偏服务地址</legend>
+  <label>tile-proxy 地址（浏览器能访问的那个地址）
+    <input type="text" id="base" value="http://192.0.2.10:9002" spellcheck="false">
+  </label>
+  <p class="sub">不纠偏版本时这里可随便填。Immich 若是 https 访问，这里也必须是 https，否则浏览器会拦混合内容。</p>
+  <label class="row"><input type="checkbox" id="fixed" checked> 使用纠偏版（高德瓦片 GCJ-02 → WGS-84，照片标记才压得准）</label>
+</fieldset>
+
+<div id="out"></div>
+
+<script>
+// 与 immich_amap/tiles.py 的 tile_config() 同步（tests/test_web.py 校验）
+const TILE_CONFIG = {
+  "roadHosts": [
+    "webrd01.is.autonavi.com",
+    "webrd02.is.autonavi.com",
+    "webrd03.is.autonavi.com",
+    "webrd04.is.autonavi.com"
+  ],
+  "satelliteHosts": [
+    "webst01.is.autonavi.com",
+    "webst02.is.autonavi.com",
+    "webst03.is.autonavi.com",
+    "webst04.is.autonavi.com"
+  ],
+  "roadQuery": "lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}",
+  "satelliteImageQuery": "style=6&x={x}&y={y}&z={z}",
+  "satelliteLabelQuery": "style=8&x={x}&y={y}&z={z}",
+  "proxyRoute": "/proxy/gcj2wgs/",
+  "minZoom": 3,
+  "maxZoom": 18,
+  "attribution": "© 高德地图 AutoNavi"
+};
+
+// encodeURIComponent 会把 { } 编码成 %7B %7D，而 MapLibre 需要字面量 {x}/{y}/{z}
+function encodeUpstream(url) {
+  return encodeURIComponent(url).replace(/%7B/g, '{').replace(/%7D/g, '}');
+}
+
+function tiles(query, hosts, base, fixed) {
+  return hosts.map(host => {
+    const upstream = `https://${host}/appmaptile?${query}`;
+    return fixed ? `${base.replace(/\/+$/, '')}${TILE_CONFIG.proxyRoute}${encodeUpstream(upstream)}` : upstream;
+  });
+}
+
+function rasterSource(tileUrls) {
+  return {
+    type: 'raster',
+    tiles: tileUrls,
+    tileSize: 256,
+    minzoom: TILE_CONFIG.minZoom,
+    maxzoom: TILE_CONFIG.maxZoom,
+    attribution: TILE_CONFIG.attribution,
+  };
+}
+
+function style(name, {dark, sat, tilesRoad, tilesSat, tilesLab}) {
+  const sources = {}, layers = [
+    {id: 'bg', type: 'background', paint: {'background-color': dark ? '#0e1116' : '#f2f3f5'}},
+  ];
+  if (!sat) {
+    sources.amap = rasterSource(tilesRoad);
+    const layer = {id: 'amap', type: 'raster', source: 'amap'};
+    if (dark) layer.paint = {'raster-brightness-max': 0.52, 'raster-saturation': -0.65, 'raster-contrast': 0.05};
+    layers.push(layer);
+  } else {
+    sources.sat = rasterSource(tilesSat);
+    sources.lab = rasterSource(tilesLab);
+    layers.push({id: 'sat', type: 'raster', source: 'sat'});
+    layers.push({id: 'lab', type: 'raster', source: 'lab'});
+  }
+  return {version: 8, name, sources, layers};
+}
+
+function dataUrl(obj) {
+  const json = JSON.stringify(obj);
+  const bytes = new TextEncoder().encode(json);
+  let bin = '';
+  for (const b of bytes) bin += String.fromCharCode(b);
+  return 'data:application/json;base64,' + btoa(bin);
+}
+
+function render() {
+  const base = document.getElementById('base').value.trim();
+  const fixed = document.getElementById('fixed').checked;
+  const road = tiles(TILE_CONFIG.roadQuery, TILE_CONFIG.roadHosts, base, fixed);
+  const sat = tiles(TILE_CONFIG.satelliteImageQuery, TILE_CONFIG.satelliteHosts, base, fixed);
+  const lab = tiles(TILE_CONFIG.satelliteLabelQuery, TILE_CONFIG.satelliteHosts, base, fixed);
+
+  const items = [
+    ['亮色风格 · 高德路网', '贴到「亮色风格」', style('AMap Road Light ' + (fixed ? '(fixed)' : '(raw)'), {dark: false, tilesRoad: road})],
+    ['暗色风格 · 路网压暗', '贴到「暗色风格」', style('AMap Road Dark ' + (fixed ? '(fixed)' : '(raw)'), {dark: true, tilesRoad: road})],
+    ['卫星影像 + 路网注记', '亮色/暗色都能用，天然偏暗', style('AMap Satellite ' + (fixed ? '(fixed)' : '(raw)'), {sat: true, tilesSat: sat, tilesLab: lab})],
+  ];
+
+  const out = document.getElementById('out');
+  out.innerHTML = '';
+  for (const [title, hint, obj] of items) {
+    const url = dataUrl(obj);
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.innerHTML = `<h3>${title} <span class="ok">${url.length} 字符</span></h3><p class="hint">${hint}</p>`;
+    const textarea = document.createElement('textarea');
+    textarea.value = url;
+    textarea.readOnly = true;
+    const bar = document.createElement('div');
+    bar.className = 'row';
+    const copy = document.createElement('button');
+    copy.textContent = '复制';
+    copy.onclick = async () => {
+      textarea.select();
+      try { await navigator.clipboard.writeText(url); } catch (_) { document.execCommand('copy'); }
+      copy.textContent = '已复制 ✓';
+      setTimeout(() => copy.textContent = '复制', 1200);
+    };
+    const download = document.createElement('button');
+    download.textContent = '下载 JSON（自己托管时用）';
+    download.className = 'ghost';
+    download.onclick = () => {
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(new Blob([JSON.stringify(obj, null, 2)], {type: 'application/json'}));
+      link.download = title.replace(/[^\w\u4e00-\u9fa5]+/g, '_') + '.json';
+      link.click();
+      URL.revokeObjectURL(link.href);
+    };
+    bar.append(copy, download);
+    card.append(textarea, bar);
+    out.append(card);
+  }
+}
+
+document.getElementById('base').addEventListener('input', render);
+document.getElementById('fixed').addEventListener('change', render);
+render();
+</script>
+</body>
+</html>

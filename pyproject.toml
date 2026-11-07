@@ -1,0 +1,57 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "immich-amap"
+description = "Immich 高德地图（GCJ-02 纠偏）样式生成与中文地名库工具"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "immich-amap contributors" }]
+keywords = ["immich", "maplibre", "amap", "gcj-02", "geodata"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Operating System :: OS Independent",
+  "Topic :: Multimedia :: Graphics :: Viewers",
+  "License :: OSI Approved :: MIT License",
+]
+dynamic = ["version"]
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest>=7", "ruff>=0.6", "pillow>=10"]
+# 可选：全量繁简转换（只影响 --alternate-names 的转换质量，不装则用内置 251 字表）
+zh = ["zhconv>=1.4"]
+
+
+[project.urls]
+Homepage = "https://github.com/whxciotw/immich-amap"
+Repository = "https://github.com/whxciotw/immich-amap"
+Issues = "https://github.com/whxciotw/immich-amap/issues"
+
+[project.scripts]
+immich-amap = "immich_amap.cli:main"
+
+[tool.setuptools]
+packages = ["immich_amap"]
+
+[tool.setuptools.package-data]
+immich_amap = ["py.typed"]
+
+[tool.setuptools.dynamic]
+version = { attr = "immich_amap.__version__" }
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 120
+target-version = "py39"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["immich_amap"]
